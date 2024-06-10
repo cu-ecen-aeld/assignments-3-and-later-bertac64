@@ -1,4 +1,13 @@
 #include "systemcalls.h"
+#include <unistd.h>
+#define _XOPEN_SOURCE
+#include <stdlib.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <string.h>
+#include <fcntl.h>
+
 
 /**
  * @param cmd the command to execute with system()
@@ -16,7 +25,15 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
+	int ret=0;
+	if(cmd == NULL){
+		if((ret = system(cmd)) == 0) return false;
+	}else{
+		if((ret = system(cmd)) == -1){
+			printf("Error: cannot execute command! %s\n", strerror(errno));
+			return false;
+		}
+	}
     return true;
 }
 
@@ -58,6 +75,39 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+	for(i=0; i<count; i++)
+    {
+		// create a process identical to the invoking process
+		pid_t pid = fork();
+		// check if error creating the process
+		if (pid < 0){
+			perror("fork");
+			va_end(args);
+			return false;
+		}
+		
+		if (pid == 0){
+			// child process running the command[0] process
+			int ret = execv(command[0], command);
+			if (ret == -1){
+				perror("execv");
+				exit(EXIT_FAILURE);
+			}
+		}else{
+			// parent process
+			int status;
+			if (waitpid(pid, &status, 0) == -1) {
+				perror("waitpid");
+				va_end(args);
+				return false;
+			}
+			
+			if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)){
+				va_end(args);
+				return false;
+			}
+		}
+	}
 
     va_end(args);
 
@@ -92,7 +142,49 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
-
+	int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+	if(fd < 0) {
+		perror("open");
+		va_end(args);
+		return false;
+	}
+	for(i=0; i<count; i++){
+		printf("command[%d] = %s\n", i, command[i]);
+	}
+	// create a process identical to the invoking process
+	pid_t pid = fork();
+	// check if error creating the process
+	if (pid < 0){
+		perror("fork");
+		va_end(args);
+		return false;
+	}
+		
+	if (pid == 0){
+		printf("Redirectingnoutput to %s\n", outputfile);
+		if(dup2(fd,STDOUT_FILENO) < 0){
+			perror("dup2");
+			close(fd);
+			va_end(args);
+			exit(EXIT_FAILURE);
+		}
+		// child process running the command[0] process
+		execv(command[0], command);
+		perror("execv");
+		close(fd);
+		va_end(args);
+		exit(EXIT_FAILURE);
+	}else{
+		// parent process
+		int status;
+		if (waitpid(pid, &status, 0) == -1) {
+			perror("waitpid");
+			va_end(args);
+			return false;
+		}
+		va_end(args);
+		return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+	}
     va_end(args);
 
     return true;
