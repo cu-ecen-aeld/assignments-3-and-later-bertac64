@@ -1,5 +1,5 @@
 #!/bin/sh
-# Tester script for assignment 1, assignment 2 and assignment 3 part1
+# Tester script for assignment 1 and assignment 2
 # Author: Siddhant Jajoo
 
 set -e
@@ -52,12 +52,14 @@ fi
 #make clean
 #make
 
-for i in $( seq 1 $NUMFILES)
-do
+#for i in $( seq 1 $NUMFILES)
+for i in {1..$NUMFILES}; do
 	./writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
-
-OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
+echo "files generation complete"
+#OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
+./finder.sh "$WRITEDIR" "$WRITESTR"
+OUTPUTSTRING=$?
 
 # remove temporary directories
 rm -rf /tmp/aeld-data
