@@ -4,7 +4,7 @@
 
 set -e
 set -u
-
+MYDIR=$(pwd)
 NUMFILES=10
 WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp/aeld-data
@@ -32,7 +32,7 @@ echo "Writing ${NUMFILES} files containing string ${WRITESTR} to ${WRITEDIR}"
 rm -rf "${WRITEDIR}"
 
 # create $WRITEDIR if not assignment1
-assignment=`cat ../conf/assignment.txt`
+assignment=`cat conf/assignment.txt`
 
 if [ $assignment != 'assignment1' ]
 then
@@ -51,16 +51,16 @@ fi
 #echo "Removing the old writer utility and compiling as a native application"
 #make clean
 #make
-
-#for i in $( seq 1 $NUMFILES)
-for i in {1..$NUMFILES}; do
+cd "$MYDIR"
+for i in $( seq 1 $NUMFILES)
+do
 	./writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 echo "files generation complete"
-#OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
-./finder.sh "$WRITEDIR" "$WRITESTR"
-OUTPUTSTRING=$?
-
+OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
+#./finder.sh "$WRITEDIR" "$WRITESTR"
+#OUTPUTSTRING=$?
+echo ${OUTPUTSTRING}
 # remove temporary directories
 rm -rf /tmp/aeld-data
 

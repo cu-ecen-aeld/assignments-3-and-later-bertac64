@@ -1,5 +1,5 @@
 #!/bin/sh
-#Authoir Claudio Bertacchini
+#Author Claudio Bertacchini
 
 # Argument's number check
 if [ "$#" -ne 2 ]; then
