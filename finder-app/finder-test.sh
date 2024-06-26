@@ -8,7 +8,8 @@ MYDIR=$(pwd)
 NUMFILES=10
 WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp/aeld-data
-username=$(cat conf/username.txt)
+username=$(cat /etc/finder-app/conf/username.txt)
+CROSS_COMPILE=aarch64-none-linux-gnu-
 
 if [ $# -lt 3 ]
 then
@@ -32,7 +33,7 @@ echo "Writing ${NUMFILES} files containing string ${WRITESTR} to ${WRITEDIR}"
 rm -rf "${WRITEDIR}"
 
 # create $WRITEDIR if not assignment1
-assignment=`cat conf/assignment.txt`
+assignment=`cat /etc/finder-app/conf/assignment.txt`
 
 if [ $assignment != 'assignment1' ]
 then
@@ -49,18 +50,19 @@ then
 	fi
 fi
 #echo "Removing the old writer utility and compiling as a native application"
-#make clean
-#make
+make clean
+#make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} OUT_DIR=/usr/bin all
+make all
+make OUT_DIR=/usr/bin install
+
 cd "$MYDIR"
 for i in $( seq 1 $NUMFILES)
 do
-	./writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
+	writer "$WRITEDIR/${username}$i.txt" "$WRITESTR"
 done
 echo "files generation complete"
-OUTPUTSTRING=$(./finder.sh "$WRITEDIR" "$WRITESTR")
-#./finder.sh "$WRITEDIR" "$WRITESTR"
-#OUTPUTSTRING=$?
-echo ${OUTPUTSTRING}
+OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR")
+echo ${OUTPUTSTRING} > /tmp/assignment4-result.txt
 # remove temporary directories
 rm -rf /tmp/aeld-data
 
