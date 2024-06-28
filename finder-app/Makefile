@@ -16,12 +16,12 @@ endif
 all: $(TARGET)
 
 #rule for compiling .c files
-$(TARGET): $(OBJ)
-	$(LD) $(LDFLAGS) -o $@ $^ 
-
-#rule for compiling .c files	
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+#rule for compiling .c files	
+$(TARGET): $(OBJ)
+	$(LD) $(LDFLAGS) -o $@ $^ 
 
 #rule for install software
 install: $(TARGET)
