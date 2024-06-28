@@ -1,12 +1,12 @@
 # Makefile for assignment2
 
 CC := $(CROSS_COMPILE)gcc
-LD := $(CROSS_COMPILE)gcc
+#LD := $(CROSS_COMPILE)gcc
 TARGET := writer
 CFLAGS := -Wall -Wextra -O2
 SRC := $(TARGET).c
 OBJ := $(SRC:.c=.o)
-LDFLAGS :=
+#LDFLAGS :=
 
 ifeq ($(ARCH), arm64)
 	CFLAGS += -g
@@ -21,7 +21,7 @@ all: $(TARGET)
 
 #rule for compiling .c files	
 $(TARGET): $(OBJ)
-	$(LD) $(LDFLAGS) -o $@ $^ 
+	$(CC) $(CFLAGS) -o $@ $^ 
 
 #rule for install software
 install: $(TARGET)
