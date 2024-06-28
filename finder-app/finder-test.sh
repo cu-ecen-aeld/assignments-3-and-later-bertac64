@@ -51,8 +51,8 @@ then
 fi
 #echo "Removing the old writer utility and compiling as a native application"
 make clean
-#make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} OUT_DIR=/usr/bin all
-make all
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} OUT_DIR=/usr/bin all
+#make all
 make OUT_DIR=/usr/bin install
 
 cd "$MYDIR"
