@@ -50,10 +50,10 @@ then
 	fi
 fi
 #echo "Removing the old writer utility and compiling as a native application"
-make clean
-make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} OUT_DIR=/usr/bin all
+#make clean
+#make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} OUT_DIR=/usr/bin all
 #make all
-make OUT_DIR=/usr/bin install
+#make OUT_DIR=/usr/bin install
 
 cd "$MYDIR"
 for i in $( seq 1 $NUMFILES)
