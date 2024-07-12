@@ -1,3 +1,5 @@
+# Makefile for assignment5
+
 CC = $(CROSS_COMPILE)gcc
 CFLAGS = -Wall -Wextra -O2
 TARGET = aesdsocket
@@ -8,7 +10,7 @@ ifeq ($(ARCH), arm64)
 	CFLAGS += -g
 endif
 
-.PHONY: all clean
+.PHONY: all install clean
 
 all: $(TARGET)
 
@@ -21,6 +23,10 @@ $(TARGET): $(OBJ)
 
 #$(TARGET): $(TARGET).c
 #	$(CC) $(CFLAGS) -o $(TARGET) $(TARGET).c
+
+#rule for install software
+install: $(TARGET)
+	cp $(TARGET) $(OUT_DIR)
 
 clean:
 	rm -f $(TARGET) $(OBJ)
