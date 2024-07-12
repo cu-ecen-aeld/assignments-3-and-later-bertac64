@@ -4,7 +4,7 @@ AESDPAR="-d"
 case "$1" in
 	start)
 		echo "Starting aesdsocket"
-		start-stop-daemon -S -n aesdsocket -a /usr/bin/aesdsocket --$AESDPAR
+		start-stop-daemon -S -n aesdsocket -a /usr/bin/aesdsocket $AESDPAR
 		;;
 	stop)
 		echo "Stopping aesdserver"
