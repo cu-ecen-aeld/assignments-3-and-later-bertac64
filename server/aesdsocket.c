@@ -57,7 +57,7 @@ void daemonize() {
         exit(EXIT_FAILURE);
     }
 
-    pid = fork();
+/*    pid = fork();
     if (pid < 0) {
         perror("fork");
         exit(EXIT_FAILURE);
@@ -74,7 +74,7 @@ void daemonize() {
 
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
-    close(STDERR_FILENO);
+    close(STDERR_FILENO);*/
 }
 
 void process_client(int client_socket) {
