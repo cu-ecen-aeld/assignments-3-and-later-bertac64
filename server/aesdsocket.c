@@ -187,45 +187,44 @@ int main(int argc, char *argv[]) {
     
     if (argc == 2 && strcmp(argv[1], "-d") == 0) {
         daemonize();
-    }else{
+    }
 
-//		if (listen(server_socket, BACKLOG) == -1) {
-		if (listen(server_socket, SOMAXCONN) == -1) {
-		    syslog(LOG_ERR, "Error listening on socket: %s", strerror(errno));
-		    close(server_socket);
-		    return -1;
-		}
-
-		file_fd = open(FILE_PATH, O_CREAT | O_APPEND | O_RDWR, 0666);
-		if (file_fd == -1) {
-		    syslog(LOG_ERR, "Error opening file: %s", strerror(errno));
-		    close(server_socket);
-		    return -1;
-		}
-
-		while (!sig_received){
-			addr_size = sizeof(client_addr);
-			client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_size);
-			if (client_socket == -1) {
-			    syslog(LOG_ERR, "Error accepting connection: %s", strerror(errno));
-			    continue;
-			}
-
-			if (client_addr.ss_family == AF_INET) {
-			    struct sockaddr_in *s = (struct sockaddr_in *)&client_addr;
-			    inet_ntop(AF_INET, &s->sin_addr, client_ip, sizeof(client_ip));
-			}
-
-			syslog(LOG_INFO, "Accepted connection from %s", client_ip);
-
-			process_client(client_socket);
-			proc_run = 0;
-
-			close(client_socket);
-			client_socket = -1;
-			syslog(LOG_INFO, "Closed connection from %s", client_ip);
-		}
+	if (listen(server_socket, SOMAXCONN) == -1) {
+	    syslog(LOG_ERR, "Error listening on socket: %s", strerror(errno));
+	    close(server_socket);
+	    return -1;
 	}
+
+	file_fd = open(FILE_PATH, O_CREAT | O_APPEND | O_RDWR, 0666);
+	if (file_fd == -1) {
+	    syslog(LOG_ERR, "Error opening file: %s", strerror(errno));
+	    close(server_socket);
+	    return -1;
+	}
+
+	while (!sig_received){
+		addr_size = sizeof(client_addr);
+		client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_size);
+		if (client_socket == -1) {
+		    syslog(LOG_ERR, "Error accepting connection: %s", strerror(errno));
+		    continue;
+		}
+
+		if (client_addr.ss_family == AF_INET) {
+		    struct sockaddr_in *s = (struct sockaddr_in *)&client_addr;
+		    inet_ntop(AF_INET, &s->sin_addr, client_ip, sizeof(client_ip));
+		}
+
+		syslog(LOG_INFO, "Accepted connection from %s", client_ip);
+
+		process_client(client_socket);
+		proc_run = 0;
+
+		close(client_socket);
+		client_socket = -1;
+		syslog(LOG_INFO, "Closed connection from %s", client_ip);
+	}
+
     close(server_socket);
     close(file_fd);
     remove(FILE_PATH);
