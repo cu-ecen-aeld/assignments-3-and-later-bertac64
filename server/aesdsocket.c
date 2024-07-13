@@ -57,7 +57,7 @@ void daemonize() {
         exit(EXIT_FAILURE);
     }
 
-/*    pid = fork();
+    pid = fork();
     if (pid < 0) {
         perror("fork");
         exit(EXIT_FAILURE);
@@ -66,7 +66,7 @@ void daemonize() {
         exit(EXIT_SUCCESS);
     }
 
-    umask(0);
+/*    umask(0);
     if (chdir("/") == -1){
     	perror("chdir");
     	exit(EXIT_FAILURE);

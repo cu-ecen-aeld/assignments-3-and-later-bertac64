@@ -1,7 +1,7 @@
 # Makefile for assignment5
 
-#CROSS_COMPILE=aarch64-none-linux-gnu-
-#ARCH=arm64
+CROSS_COMPILE=aarch64-none-linux-gnu-
+ARCH=arm64
 CC = $(CROSS_COMPILE)gcc
 CFLAGS = -Wall -Wextra -O2
 TARGET = aesdsocket
