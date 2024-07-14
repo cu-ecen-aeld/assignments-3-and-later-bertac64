@@ -57,7 +57,7 @@ void daemonize() {
         exit(EXIT_FAILURE);
     }
 
-/*    pid = fork();
+    pid = fork();
     if (pid < 0) {
         perror("fork");
         exit(EXIT_FAILURE);
@@ -74,7 +74,7 @@ void daemonize() {
 
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
-    close(STDERR_FILENO);*/
+    close(STDERR_FILENO);
 }
 
 void process_client(int client_socket) {
@@ -84,64 +84,64 @@ void process_client(int client_socket) {
     size_t packet_len = 0;
     char *newline_pos;
     
-	if (!sig_received) {
-		proc_run = 1;
-		while ((num_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0) {
-			buffer[num_bytes] = '\0';
-		    packet = realloc(packet, packet_len + num_bytes + 1);
-		    if (!packet) {
-		        syslog(LOG_ERR, "Error reallocating memory: %s", strerror(errno));
-		        return;
-		    }
-		    memcpy(packet + packet_len, buffer, num_bytes);
-		    packet_len += num_bytes;
-		    packet[packet_len] = '\0';
-//		    printf("packet received: %ld bytes\n", packet_len);
-
-			if (num_bytes < BUFFER_SIZE){ 
-				newline_pos = strchr(packet, '\n');
-				if (newline_pos != NULL) {
-				    *(newline_pos + 1) = '\0';
-				}else{
-					packet = realloc(packet, packet_len + 1);
-					packet_len++;
-					packet[packet_len-1]='\n';
-					packet[packet_len] = '\0';
-					newline_pos = packet + packet_len;
-				}
-		        size_t complete_packet_len = newline_pos - packet + 1;
-
-		        ssize_t bytes_written = write(file_fd, packet, complete_packet_len);
-		        if (bytes_written == -1) {
-		            syslog(LOG_ERR, "Error writing to file: %s", strerror(errno));
-		            free(packet);
-		            return;
-		        }
-
-		        // Read back the file and send its contents to the client
-		        lseek(file_fd, 0, SEEK_SET);
-		        off_t file_size = lseek(file_fd, 0, SEEK_END);
-		        lseek(file_fd, 0, SEEK_SET);
-		        off_t offset = 0;
-		        while (offset < file_size) {
-		            num_bytes = pread(file_fd, buffer, BUFFER_SIZE, offset);
-		            if (num_bytes == -1) {
-		                syslog(LOG_ERR, "Error reading from file: %s", strerror(errno));
-		                free(packet);
-		                return;
-		            }
-
-		            if (send(client_socket, buffer, num_bytes, 0) == -1) {
-		                syslog(LOG_ERR, "Error sending data: %s", strerror(errno));
-		                free(packet);
-		                return;
-		            }
-		            offset += num_bytes;
-		        }
-		    }
+	proc_run = 1;
+	while(!sig_received){
+		num_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
+		// check if receiving is good
+		if(num_bytes < 0){
+			perror("recv");
+			if(packet) free(packet);
+			return;
 		}
-    	free(packet);
-    }
+		//add received data to the packet
+		packet = realloc(packet, packet_len + num_bytes);
+		if (!packet) {
+		    syslog(LOG_ERR, "Error reallocating memory: %s", strerror(errno));
+		    return;
+		}
+		memcpy(packet + packet_len, buffer, num_bytes);
+		packet_len += num_bytes;
+//	    printf("packet received: %ld bytes\n", packet_len);
+//	    printf("last packet value: %d\n", packet[packet_len-1]);
+		// check for newline and save
+		if (num_bytes < BUFFER_SIZE) {
+			//check newline position
+			newline_pos = strchr(packet, '\n');
+//			size_t complete_packet_len = newline_pos - packet + 1;
+			if (newline_pos){
+				ssize_t bytes_written = write(file_fd, packet, packet_len);
+				if (bytes_written == -1) {
+					syslog(LOG_ERR, "Error writing to file: %s", strerror(errno));
+					free(packet);
+					return;
+				}
+
+				// Read back the file and send its contents to the client
+				lseek(file_fd, 0, SEEK_SET);
+				off_t file_size = lseek(file_fd, 0, SEEK_END);
+				lseek(file_fd, 0, SEEK_SET);
+				off_t offset = 0;
+				while (offset < file_size) {
+					num_bytes = pread(file_fd, buffer, BUFFER_SIZE, offset);
+					if (num_bytes == -1) {
+						syslog(LOG_ERR, "Error reading from file: %s", strerror(errno));
+						free(packet);
+						return;
+					}
+
+					if (send(client_socket, buffer, num_bytes, 0) == -1) {
+						syslog(LOG_ERR, "Error sending data: %s", strerror(errno));
+						free(packet);
+						return;
+					}
+					offset += num_bytes;
+				}
+				free(packet);
+				return;
+			}
+		}	
+	}
+	if(packet) free(packet);
 }
 
 
@@ -151,6 +151,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_storage client_addr;
     socklen_t addr_size;
     char client_ip[INET6_ADDRSTRLEN];
+    int opt = 1;
 
     openlog("aesdsocket", LOG_PID, LOG_USER);
 
@@ -160,7 +161,7 @@ int main(int argc, char *argv[]) {
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;  // Allow IPv4
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;  // Use my IP
+//    hints.ai_flags = AI_PASSIVE;  // Use my IP
     hints.ai_addr = INADDR_ANY;
     hints.ai_protocol = 0;
     
@@ -174,6 +175,11 @@ int main(int argc, char *argv[]) {
         syslog(LOG_ERR, "Error creating socket: %s", strerror(errno));
         freeaddrinfo(res);
         return -1;
+    }
+    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        close(server_socket);
+        exit(EXIT_FAILURE);
     }
 
     if (bind(server_socket, res->ai_addr, res->ai_addrlen) == -1) {
