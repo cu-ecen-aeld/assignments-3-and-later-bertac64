@@ -66,7 +66,7 @@ void daemonize() {
         exit(EXIT_SUCCESS);
     }
 
-    umask(0);
+/*    umask(0);
     if (chdir("/") == -1){
     	perror("chdir");
     	exit(EXIT_FAILURE);
@@ -74,7 +74,7 @@ void daemonize() {
 
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
-    close(STDERR_FILENO);
+    close(STDERR_FILENO);*/
 }
 
 void process_client(int client_socket) {
