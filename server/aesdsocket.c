@@ -159,10 +159,10 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, handle_signal);
     
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;  // Allow IPv4
+    hints.ai_family = AF_UNSPEC;  // Allow IPv4
     hints.ai_socktype = SOCK_STREAM;
-//    hints.ai_flags = AI_PASSIVE;  // Use my IP
-    hints.ai_addr = INADDR_ANY;
+    hints.ai_flags = AI_PASSIVE;  // Use my IP
+//    hints.ai_addr = INADDR_ANY;
     hints.ai_protocol = 0;
     
     if ((status = getaddrinfo(NULL, PORT, &hints, &res)) != 0) {
@@ -219,6 +219,9 @@ int main(int argc, char *argv[]) {
 		if (client_addr.ss_family == AF_INET) {
 		    struct sockaddr_in *s = (struct sockaddr_in *)&client_addr;
 		    inet_ntop(AF_INET, &s->sin_addr, client_ip, sizeof(client_ip));
+		}else{
+			struct sockaddr_in6 *s = (struct sockaddr_in6 *)&client_addr;
+		    inet_ntop(AF_INET6, &s->sin6_addr, client_ip, sizeof(client_ip));
 		}
 
 		syslog(LOG_INFO, "Accepted connection from %s", client_ip);
