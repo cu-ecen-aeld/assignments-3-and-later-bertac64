@@ -18,10 +18,10 @@ all: $(TARGET)
 
 #rule for compiling .c files
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@ -pthread
 	
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -pthread
 
 #$(TARGET): $(TARGET).c
 #	$(CC) $(CFLAGS) -o $(TARGET) $(TARGET).c
