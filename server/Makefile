@@ -2,9 +2,10 @@
 
 #CROSS_COMPILE=aarch64-none-linux-gnu-
 #ARCH=arm64
-CC = $(CROSS_COMPILE)gcc
-CFLAGS = -Wall -Wextra -O2
-TARGET = aesdsocket
+CC ?= $(CROSS_COMPILE)gcc
+CFLAGS ?= -Wall -Wextra -O2
+LDFLAGS ?= -lpthread -lrt
+TARGET ?= aesdsocket
 SRC := $(TARGET).c
 OBJ := $(SRC:.c=.o)
 
@@ -21,7 +22,7 @@ all: $(TARGET)
 	$(CC) $(CFLAGS) -c $< -o $@ -pthread
 	
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ -pthread
+	$(CC) $(CFLAGS) -o $@ $^ $(INCLUDES) $(LDFLAGS)
 
 #$(TARGET): $(TARGET).c
 #	$(CC) $(CFLAGS) -o $(TARGET) $(TARGET).c
