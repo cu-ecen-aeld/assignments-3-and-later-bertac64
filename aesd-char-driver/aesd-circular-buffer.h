@@ -18,6 +18,7 @@
 
 #define AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED 10
 
+//structure used to identify the data in the circular array: a pointer to the buffer location and the data length in bytes
 struct aesd_buffer_entry
 {
     /**
@@ -30,6 +31,7 @@ struct aesd_buffer_entry
     size_t size;
 };
 
+// the circular buffer is an array of data described by an array of structures of type aesd_buffer_entry. The data are stored in memory
 struct aesd_circular_buffer
 {
     /**

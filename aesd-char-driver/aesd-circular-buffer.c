@@ -17,10 +17,10 @@
 #include "aesd-circular-buffer.h"
 
 /**
- * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
- * @param char_offset the position to search for in the buffer list, describing the zero referenced
+ * @param buffer - the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
+ * @param char_offset - the position to search for in the buffer list, describing the zero referenced
  *      character index if all buffer strings were concatenated end to end
- * @param entry_offset_byte_rtn is a pointer specifying a location to store the byte of the returned aesd_buffer_entry
+ * @param entry_offset_byte_rtn - is a pointer specifying a location to store the byte of the returned aesd_buffer_entry
  *      buffptr member corresponding to char_offset.  This value is only set when a matching char_offset is found
  *      in aesd_buffer.
  * @return the struct aesd_buffer_entry structure representing the position described by char_offset, or
@@ -32,6 +32,30 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     /**
     * TODO: implement per description
     */
+    size_t accumulated_size = 0;
+    uint8_t index = 0;
+    struct aesd_buffer_entry *current_entry;
+    //using the macro to iterate over each entry in the circular buffer
+    AESD_CIRCULAR_BUFFER_FOREACH(current_entry, buffer, index) {
+        //verify when the index matches with the out offset or if the buffer is full         
+        if (index == buffer->out_offs || buffer->full) {
+            // Check if the desired char_offset falls within the current entry
+            if (accumulated_size + current_entry->size > char_offset) {
+                // Calculate the specific offset within this entry
+                *entry_offset_byte_rtn = char_offset - accumulated_size;
+                return current_entry;
+            }
+
+            // Accumulate the size
+            accumulated_size += current_entry->size;
+
+            // Stop iterating when we reach the in_offs (unless buffer is full)
+            if (index == buffer->in_offs && !buffer->full) {
+                break;
+            }
+        }
+    }
+    // If we exit the loop, the offset was not found in the buffer
     return NULL;
 }
 
@@ -47,6 +71,21 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     /**
     * TODO: implement per description
     */
+    // Add the new entry at the current in_offs location
+    buffer->entry[buffer->in_offs] = *add_entry;
+
+    if (buffer->full) {
+        // If the buffer was full, increment out_offs to overwrite the oldest entry
+        buffer->out_offs = (buffer->out_offs + 1);    // % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
+
+    // Move the in_offs to the next position
+    buffer->in_offs = (buffer->in_offs + 1);    // % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+    // If in_offs catches up with out_offs, the buffer is full
+    if (buffer->in_offs == buffer->out_offs) {
+        buffer->full = true;
+    }
 }
 
 /**
