@@ -4,7 +4,7 @@
 The operative system detected the tentative to write something using a null pointer:
 > Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000
 
-##The message reported:
+## The message reported:
 - the memory abort info:
 ```
 	ESR = 0x96000045
