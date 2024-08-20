@@ -30,7 +30,13 @@ The operative system detected the tentative to write something using a null poin
 ```
 	scull(0) faulty(0) hello(0)
 ```
-- The cpu involved (0), the PID (160), the Comm (sh) the Tainted (G 0 5.15.18 #1)
+- the info about cpu, PID, kernel
+```
+	* cpu: 0
+	* PID: 160
+	* Comm: sh
+	* Tainted: G 0 5.15.18 #1
+```
 - the reference to the hardware:
 ```
 	Hardware name: linux,dummy-virt
