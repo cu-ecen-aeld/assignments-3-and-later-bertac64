@@ -90,6 +90,7 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
 		    retval = -EFAULT;
 		    goto out;
 		}
+		printk(KERN_INFO "aesdchar: %s",buf);
 		count -= available_bytes;
 		*f_pos += available_bytes;
 		bytes_read +=available_bytes;
@@ -140,8 +141,11 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
     
     for (i = 0; i < count; i++){
+    	//printk(KERN_INFO "aesdchar: %c",write_buffer[i]);
     	if (write_buffer[i] == '\n'){
     		new_entry_size = i + 1;
+//    		dev->partial_size = 0;
+    		//printk(KERN_INFO "\n");
     		break;
     	}
     }
@@ -245,7 +249,7 @@ int aesd_init_module(void)
     // mutex initialization
     mutex_init(&aesd_device.lock);
 	
-    printk(KERN_WARNING "aesdchar: device initializedaesd_deviceth major= %d minor=%d\n", aesd_major, aesd_minor);
+    printk(KERN_WARNING "aesdchar: device initialized with major= %d minor=%d\n", aesd_major, aesd_minor);
     return 0;
 }
 
