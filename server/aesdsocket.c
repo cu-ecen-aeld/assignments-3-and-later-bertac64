@@ -22,7 +22,12 @@
 
 #define PORT "9000"
 //#define BACKLOG 10
-#define FILE_PATH "/var/tmp/aesdsocketdata"
+#define USE_AESD_CHAR_DEVICE 1
+#ifndef USE_AESD_CHAR_DEVICE
+  #define FILE_PATH "/var/tmp/aesdsocketdata"
+#else
+  #define FILE_PATH "/dev/aesdchar"
+#endif
 #define BUFFER_SIZE 1024
 #define TIMEOUT_SEC 1
 
@@ -97,16 +102,18 @@ void *process_client(void *arg) {
     size_t packet_len = 0;
     char *newline_pos;
     proc_run = 1;
+    int file_fd;
     
     pthread_mutex_lock(&file_mutex);
-    int file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
+#ifndef USE_AESD_CHAR_DEVICE
+    file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
     if (file_fd == -1) {
         perror("open");
         close(client_socket);
         pthread_mutex_unlock(&file_mutex);
         pthread_exit(NULL);
     }
-    
+#endif    
     while(!sig_received){
     	// receiving data
 		num_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
@@ -114,15 +121,19 @@ void *process_client(void *arg) {
 		if(num_bytes < 0){
 			perror("recv");
 			if(packet) free(packet);
+#ifndef USE_AESD_CHAR_DEVICE
 			close(file_fd);
-			pthread_mutex_unlock(&file_mutex);
+#endif
+                        pthread_mutex_unlock(&file_mutex);
 			pthread_exit(NULL);
 		}
 		//add received data to the packet
 		packet = realloc(packet, packet_len + num_bytes);
 		if (!packet) {
 			syslog(LOG_ERR, "Error reallocating memory: %s", strerror(errno));
+#ifndef USE_AESD_CHAR_DEVICE			
 			close(file_fd);
+#endif
 			pthread_mutex_unlock(&file_mutex);
 			pthread_exit(NULL);
 		}
@@ -136,7 +147,18 @@ void *process_client(void *arg) {
 			//check newline position
 			newline_pos = strchr(packet, '\n');
 			if (newline_pos){
-				// writing data into the file
+#ifdef USE_AESD_CHAR_DEVICE
+				//open driver endpoint
+				file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
+                                if (file_fd == -1) {
+                                    perror("open");
+                                    close(client_socket);
+                                    if(packet) free(packet);
+                                    pthread_mutex_unlock(&file_mutex);
+                                    pthread_exit(NULL);
+                                }
+#endif
+                                // writing data into the file
 				ssize_t bytes_written = write(file_fd, packet, packet_len);
 				if (bytes_written == -1) {
 					syslog(LOG_ERR, "Error writing to file: %s", strerror(errno));
@@ -181,7 +203,9 @@ void *process_client(void *arg) {
 		}
     }
     if(packet) free(packet);
+#ifundef USE_AESD_CHAR_DEVICE
     close(file_fd);
+#endif
     pthread_mutex_lock(&file_mutex);
     pthread_exit(NULL);
 }
@@ -209,7 +233,7 @@ void cleanup_threads(head_t *head) {
     }
     pthread_mutex_unlock(&list_mutex);
 }
-
+#ifundef USE_AESD_CHAR_DEVICE
 void *timestamp_thread(void *arg) {
     free(arg);
     int file_fd = open("/var/tmp/aesdsocketdata", O_WRONLY | O_APPEND | O_CREAT, 0644);
@@ -237,10 +261,10 @@ void *timestamp_thread(void *arg) {
         }
         pthread_mutex_unlock(&file_mutex);
     }
-
     close(file_fd);
     pthread_exit(NULL);
 }
+#endif
 
 int main(int argc, char *argv[]) {
     int status;
@@ -325,15 +349,15 @@ int main(int argc, char *argv[]) {
 	}
 	
 	syslog(LOG_INFO, "Server is listening on port 9000...\n");
-	
+#ifundef USE_AESD_CHAR_DEVICE	
 	// Create timestamp thread
-    pthread_t timestamp_thread_id;
-    if (pthread_create(&timestamp_thread_id, NULL, timestamp_thread, NULL) != 0) {
-        perror("pthread_create");
-        close(server_socket);
-        return -1;
-    }
-        
+        pthread_t timestamp_thread_id;
+        if (pthread_create(&timestamp_thread_id, NULL, timestamp_thread, NULL) != 0) {
+            perror("pthread_create");
+            close(server_socket);
+            return -1;
+        }
+#endif        
 	while (!sig_received){
 		addr_size = sizeof(client_addr);
 		//extracts the  first  connection  request  on  the  queue  of pending
@@ -372,7 +396,9 @@ int main(int argc, char *argv[]) {
     cleanup_threads(&head);
     pthread_mutex_destroy(&file_mutex);
     pthread_mutex_destroy(&list_mutex);
+#ifundef USE_AESD_CHAR_DEVICE
     remove(FILE_PATH);
+#endif;
     closelog();    
     return 0;
 }
