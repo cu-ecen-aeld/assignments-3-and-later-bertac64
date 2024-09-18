@@ -203,7 +203,7 @@ void *process_client(void *arg) {
 		}
     }
     if(packet) free(packet);
-#ifundef USE_AESD_CHAR_DEVICE
+#ifndef USE_AESD_CHAR_DEVICE
     close(file_fd);
 #endif
     pthread_mutex_lock(&file_mutex);
@@ -233,7 +233,7 @@ void cleanup_threads(head_t *head) {
     }
     pthread_mutex_unlock(&list_mutex);
 }
-#ifundef USE_AESD_CHAR_DEVICE
+#ifndef USE_AESD_CHAR_DEVICE
 void *timestamp_thread(void *arg) {
     free(arg);
     int file_fd = open("/var/tmp/aesdsocketdata", O_WRONLY | O_APPEND | O_CREAT, 0644);
@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
 	}
 	
 	syslog(LOG_INFO, "Server is listening on port 9000...\n");
-#ifundef USE_AESD_CHAR_DEVICE	
+#ifndef USE_AESD_CHAR_DEVICE	
 	// Create timestamp thread
         pthread_t timestamp_thread_id;
         if (pthread_create(&timestamp_thread_id, NULL, timestamp_thread, NULL) != 0) {
@@ -396,9 +396,9 @@ int main(int argc, char *argv[]) {
     cleanup_threads(&head);
     pthread_mutex_destroy(&file_mutex);
     pthread_mutex_destroy(&list_mutex);
-#ifundef USE_AESD_CHAR_DEVICE
+#ifndef USE_AESD_CHAR_DEVICE
     remove(FILE_PATH);
-#endif;
+#endif
     closelog();    
     return 0;
 }

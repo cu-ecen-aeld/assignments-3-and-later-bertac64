@@ -64,6 +64,8 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
     size_t entry_offset_byte_rtn;
     size_t available_bytes;
     size_t bytes_read;
+    size_t total_size;
+    int i;
     
     PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
     /**
@@ -73,33 +75,44 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_p
     retval = 0;
     entry_offset_byte_rtn = 0;
     bytes_read = 0;
+    total_size = 0;
      
     if (mutex_lock_interruptible(&dev->lock)) return -ERESTARTSYS;
+    
+    //check if the buffer is empty
+    for (i=0; i<AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++){
+    	entry = &dev->buffer->entry[i];
+    	if (entry->buffptr != NULL){
+    		total_size += entry->size;
+    	}
+    }
+    if (*f_pos >= total_size){
+    	retval = 0;
+    	goto out;
+    }
 	
-	while (count > 0) {
-		entry= aesd_circular_buffer_find_entry_offset_for_fpos(dev->buffer, *f_pos, &entry_offset_byte_rtn);
-		if (!entry){
-			retval = 0;	//no available data
-			goto out;
-		}
-		
-		available_bytes = entry->size - entry_offset_byte_rtn;
-		if(available_bytes > count) available_bytes = count;
-		
-		if (copy_to_user(buf + bytes_read, entry->buffptr + entry_offset_byte_rtn, available_bytes)) {
-		    retval = -EFAULT;
-		    goto out;
-		}
-		printk(KERN_INFO "aesdchar: %s",buf);
-		count -= available_bytes;
-		*f_pos += available_bytes;
-		bytes_read +=available_bytes;
-		
-		if (count == 0) break;
+
+	entry= aesd_circular_buffer_find_entry_offset_for_fpos(dev->buffer, *f_pos, &entry_offset_byte_rtn);
+	if (!entry){
+		retval = 0;	//no available data
+		goto out;
 	}
 	
-	retval = bytes_read;
+	available_bytes = entry->size - entry_offset_byte_rtn;
+	if(available_bytes > count) available_bytes = count;
 	
+	if (copy_to_user(buf + bytes_read, entry->buffptr + entry_offset_byte_rtn, available_bytes)) {
+	    retval = -EFAULT;
+	    goto out;
+	}
+	printk(KERN_INFO "aesdchar: %s",buf);
+
+	*f_pos += available_bytes;
+	bytes_read +=available_bytes;
+		
+	
+	retval = bytes_read;
+	printk(KERN_INFO "aesdchar final: %s",buf);
   out:
     mutex_unlock(&dev->lock);
     return retval;
@@ -141,11 +154,11 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
     
     for (i = 0; i < count; i++){
-    	//printk(KERN_INFO "aesdchar: %c",write_buffer[i]);
+//    	printk(KERN_INFO "aesdchar: %c",write_buffer[i]);
     	if (write_buffer[i] == '\n'){
     		new_entry_size = i + 1;
 //    		dev->partial_size = 0;
-    		//printk(KERN_INFO "\n");
+//    		printk(KERN_INFO "\n");
     		break;
     	}
     }
@@ -173,14 +186,15 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	
 	if(dev->partial_size > 0){
 		memcpy(new_entry, dev->partial_write, dev->partial_size);
-		kfree(dev->partial_write);
-		dev->partial_write = NULL;
-		dev->partial_size = 0;
+		
 	}
     
     memcpy(new_entry + dev->partial_size, write_buffer, new_entry_size);
     retval = new_entry_size + dev->partial_size;
     kfree(write_buffer);
+    kfree(dev->partial_write);
+	dev->partial_write = NULL;
+	dev->partial_size = 0;
     
     entry.buffptr = new_entry;
     entry.size = retval;
