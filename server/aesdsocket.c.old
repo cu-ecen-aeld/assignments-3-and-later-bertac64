@@ -1,5 +1,4 @@
-/*assignment 5 part 1 program - done
-* assignment 8
+/*assignment 5 part 1 program
 */
 
 #include <stdio.h>
@@ -24,10 +23,10 @@
 #define PORT "9000"
 //#define BACKLOG 10
 #define USE_AESD_CHAR_DEVICE 1
-#ifndef USE_AESD_CHAR_DEVICE
-  #define FILE_PATH "/var/tmp/aesdsocketdata"
-#else
+#ifdef USE_AESD_CHAR_DEVICE
   #define FILE_PATH "/dev/aesdchar"
+#else
+  #define FILE_PATH "/var/tmp/aesdsocketdata"
 #endif
 #define BUFFER_SIZE 1024
 #define TIMEOUT_SEC 1
@@ -40,7 +39,6 @@ int *client_socket;
 // Mutex for synchronizing file writes
 pthread_mutex_t file_mutex;
 
-typedef TAILQ_HEAD(head_s, node) head_t;
 // Linked list structure for managing threads
 typedef struct node {
     pthread_t thread_id;
@@ -48,12 +46,26 @@ typedef struct node {
     TAILQ_ENTRY(node) nodes;
 } node_t;
 
+typedef TAILQ_HEAD(head_s, node) head_t;
 pthread_mutex_t list_mutex;
 head_t head;
 
 void handle_signal() {
+//    head_t *list;
     syslog(LOG_INFO, "Caught signal, exiting");
     sig_received = 1;
+/*    if (!proc_run){
+    	struct node *e = NULL;
+    	TAILQ_FOREACH(e, list, nodes){
+    	  if (e->client_socket != -1) close(e->client_socket);
+    	}
+    	_free_queue(list);
+	if (server_socket != -1) close(server_socket);
+	if (file_fd != -1) close(file_fd);
+	remove(FILE_PATH);
+	closelog();
+	exit(0);
+    }*/
 }
 
 void daemonize() {
@@ -84,155 +96,156 @@ void daemonize() {
 void *process_client(void *arg) {
     int client_socket = *(int*)arg;
     free(arg);
-//    char buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE];
     ssize_t num_bytes;
     char *packet = NULL;
-    ssize_t packet_len = 0;
+    size_t packet_len = 0;
     char *newline_pos;
     proc_run = 1;
     int file_fd;
     
-    // activating mutex
     pthread_mutex_lock(&file_mutex);
+
 #ifndef USE_AESD_CHAR_DEVICE
-	// open file
     file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
-    if (!file_fd) {
+    if (file_fd == -1) {
         perror("open");
         close(client_socket);
         pthread_mutex_unlock(&file_mutex);
         pthread_exit(NULL);
     }
-#endif    
-	// assign memory to the receiving buffer
-	packet = (char*) malloc(BUFFER_SIZE);
-	if (!packet) {
-		syslog(LOG_ERR, "Error reallocating memory: %s", strerror(errno));
-#ifndef USE_AESD_CHAR_DEVICE			
-		close(file_fd);
 #endif
-		pthread_mutex_unlock(&file_mutex);
-		pthread_exit(NULL);
-	}
-	memset(packet,0,BUFFER_SIZE);		// clear the buffer before to store the data
+    
     while(!sig_received){
-    	// receiving data   	
-		num_bytes = recv(client_socket, packet, BUFFER_SIZE, 0);
+    	// receiving data
+		num_bytes = recv(client_socket, buffer, BUFFER_SIZE, 0);
 		// check if receiving is good
 		if(num_bytes < 0){
 			perror("recv");
 			if(packet) free(packet);
-#ifndef USE_AESD_CHAR_DEVICE
 			close(file_fd);
-#endif
-	        pthread_mutex_unlock(&file_mutex);
+            pthread_mutex_unlock(&file_mutex);
 			pthread_exit(NULL);
 		}
+		//add received data to the packet
+		packet = realloc(packet, packet_len + num_bytes);
+		if (!packet) {
+			syslog(LOG_ERR, "Error reallocating memory: %s", strerror(errno));		
+			close(file_fd);
 
-		//calculate the real packet length
+			pthread_mutex_unlock(&file_mutex);
+			pthread_exit(NULL);
+		}
+		memcpy(packet + packet_len, buffer, num_bytes);
 		packet_len += num_bytes;
-		syslog(LOG_INFO,"packet received: %ld bytes\n", packet_len);
-		
-		//check newline position
-		newline_pos = strchr(packet, '\n') + 1;
-
+//	    printf("packet received: %ld bytes\n", packet_len);
+//	    printf("last packet value: %d\n", packet[packet_len-1]);
+	    
+		// check for newline and save
+		if (num_bytes < BUFFER_SIZE) {
+			//check newline position
+			newline_pos = strchr(packet, '\n');
+			if (newline_pos){
 #ifdef USE_AESD_CHAR_DEVICE
-		//open driver endpoint
-		file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
-	    if (file_fd == -1) {
-	        perror("open");
-	        close(client_socket);
-	        if(packet) free(packet);
-	        pthread_mutex_unlock(&file_mutex);
-	        pthread_exit(NULL);
-	    }
+				file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
+				if (file_fd == -1) {
+					perror("open");
+					close(client_socket);
+					pthread_mutex_unlock(&file_mutex);
+					pthread_exit(NULL);
+				}
 #endif
-		// write packet
-		if (packet_len > BUFFER_SIZE) {
-			if (write(file_fd, packet, BUFFER_SIZE) < BUFFER_SIZE) {
-				syslog(LOG_ERR, "Writing partial data error: %s", strerror(errno));
-			}
-		}else{
-			while (newline_pos){
-	            // writing data into the file
+                // writing data into the file
 				ssize_t bytes_written = write(file_fd, packet, packet_len);
 				if (bytes_written == -1) {
 					syslog(LOG_ERR, "Error writing to file: %s", strerror(errno));
-					if(packet) free(packet);
+					free(packet);
 					close(file_fd);
 					pthread_mutex_unlock(&file_mutex);
 					pthread_exit(NULL);
 				}
-				if(packet_len < bytes_written){
-					newline_pos = strtok(NULL,"\n");
-					packet_len = strlen(newline_pos) + 1;
-				}else{
-					newline_pos = NULL;
+				printf("bytes written: %ld\n", bytes_written);
+				printf("packet value: %s\n", packet);
+
+#ifndef USE_AESD_CHAR_DEVICE
+				// Read back the file and send its contents to the client
+				lseek(file_fd, 0, SEEK_SET);
+				off_t file_size = lseek(file_fd, 0, SEEK_END);
+				printf("File size. %ld\n", file_size);			
+				lseek(file_fd, 0, SEEK_SET);
+				off_t offset = 0;
+				while (offset < file_size) {
+					num_bytes = pread(file_fd, buffer, BUFFER_SIZE, offset);
+					if (num_bytes == -1) {
+						printf("error reading from file: %s\n", strerror(errno));
+						syslog(LOG_ERR, "Error reading from file: %s", strerror(errno));
+						free(packet);
+						close(file_fd);
+						pthread_mutex_unlock(&file_mutex);
+						pthread_exit(NULL);
+					}
+					printf("buffer value: %s\n", buffer);
+					if (send(client_socket, buffer, num_bytes, 0) == -1) {
+						syslog(LOG_ERR, "Error sending data: %s", strerror(errno));
+						free(packet);
+						close(file_fd);
+						pthread_mutex_unlock(&file_mutex);
+						pthread_exit(NULL);
+					}
+					offset += num_bytes;
 				}
-				syslog(LOG_INFO,"bytes written: %ld\n", bytes_written);
-			}
-		}
-
-#ifndef USE_AESD_CHAR_DEVICE
-		// Read back the file and send its contents to the client
-		lseek(file_fd, 0, SEEK_SET);
-		off_t file_size = lseek(file_fd, 0, SEEK_END);
-		lseek(file_fd, 0, SEEK_SET);
-		off_t offset = 0;
-		memset(packet,0,BUFFER_SIZE);		// clear the buffer before to store the data
-		while (file_size > offset) {
-			num_bytes = pread(file_fd, packet, BUFFER_SIZE, offset);
 #else
-		close(file_fd);
-		file_fd = open(FILE_PATH, O_RDWR | O_TRUNC | O_CREAT, 0644);
-	    if (file_fd == -1) {
-	        perror("open");
-	        close(client_socket);
-	        if(packet) free(packet);
-	        pthread_mutex_unlock(&file_mutex);
-	        pthread_exit(NULL);
-	    }
-		ssize_t offset = 0;
-
-		while(1){
-			memset(packet,0,BUFFER_SIZE);		// clear the buffer before to store the data
-			num_bytes = pread(file_fd, packet, BUFFER_SIZE, offset);
+/*				while (reading) {
+					num_bytes = read(file_fd, buffer, BUFFER_SIZE);
+					if (num_bytes < 0){
+						syslog(LOG_ERR, "Error reading character device: %s\n", strerror(errno));
+						free(packet);
+						close(file_fd);
+						pthread_mutex_unlock(&file_mutex);
+						pthread_exit(NULL);
+						reading = 0;
+						break;
+					}else if (num_bytes == 0){
+		//						syslog(LOG_INFO, "No available data, waiting...");
+						reading = 0;
+						break;
+					}else{
+		//					printf("buffer value: %s\n", buffer);
+						if (send(client_socket, buffer, num_bytes, 0) == -1) {
+							syslog(LOG_ERR, "Error sending data: %s", strerror(errno));
+							free(packet);
+							close(file_fd);
+							pthread_mutex_unlock(&file_mutex);
+							pthread_exit(NULL);
+							reading = 0;
+							break;
+						}
+					}
+				}*/
+				num_bytes = read(file_fd, buffer, BUFFER_SIZE);
+				if (num_bytes == -1) {
+					printf("error reading from file: %s\n", strerror(errno));
+					syslog(LOG_ERR, "Error reading from file: %s", strerror(errno));
+					free(packet);
+					close(file_fd);
+					pthread_mutex_unlock(&file_mutex);
+					pthread_exit(NULL);
+				}else{
+					printf("buffer value: %s\n", buffer);
+					if (send(client_socket, buffer, num_bytes, 0) == -1) {
+						syslog(LOG_ERR, "Error sending data: %s", strerror(errno));
+						free(packet);
+						close(file_fd);
+						pthread_mutex_unlock(&file_mutex);
+						pthread_exit(NULL);
+					}
+				}
 #endif
-			if (num_bytes == -1) {
-				syslog(LOG_ERR, "Error reading from file: %s", strerror(errno));
-				if(packet) free(packet);
-				close(file_fd);
-				pthread_mutex_unlock(&file_mutex);
-				pthread_exit(NULL);
 			}
-			if(num_bytes == 0) break;
-
-			ssize_t bytes_sent;
-			if (num_bytes > BUFFER_SIZE){
-				bytes_sent = send(client_socket, packet, BUFFER_SIZE, 0);
-			}else{
-				bytes_sent = send(client_socket, packet, num_bytes, 0);
-			}
-			if (num_bytes == -1) {
-				syslog(LOG_ERR, "Error sending data: %s", strerror(errno));
-				if(packet) free(packet);
-				close(file_fd);
-				pthread_mutex_unlock(&file_mutex);
-				pthread_exit(NULL);
-			}
-			syslog(LOG_INFO,"Sent %ld bytes", bytes_sent);
-			offset += num_bytes;
 		}
-
-//		if(packet) free(packet);
-		close(file_fd);
-		pthread_mutex_unlock(&file_mutex);
-		pthread_exit(NULL);
-	}
+    }
     if(packet) free(packet);
-#ifndef USE_AESD_CHAR_DEVICE
     close(file_fd);
-#endif
     pthread_mutex_lock(&file_mutex);
     pthread_exit(NULL);
 }
@@ -260,6 +273,7 @@ void cleanup_threads(head_t *head) {
     }
     pthread_mutex_unlock(&list_mutex);
 }
+
 #if 0
 void *timestamp_thread(void *arg) {
     free(arg);
@@ -295,21 +309,11 @@ void *timestamp_thread(void *arg) {
 
 int main(int argc, char *argv[]) {
     int status;
-    int daemon = 0;
     struct addrinfo hints, *res, *p;
     struct sockaddr_storage client_addr;
     socklen_t addr_size;
     char client_ip[INET6_ADDRSTRLEN];
     int opt = 1;
-    
-    if (argc > 1) {
-		if (argc == 2 && strcmp(argv[1], "-d") == 0) {
-		    daemon = 1;
-		}else{
-			syslog(LOG_ERR, "Usage: %s [-d]\n", argv[0]);
-			return 1;
-		}
-	}
     
     // Initialize mutexes
     pthread_mutex_init(&file_mutex, NULL);
@@ -320,6 +324,8 @@ int main(int argc, char *argv[]) {
 
     openlog("aesdsocket", LOG_PID, LOG_USER);
 
+//    signal(SIGINT, handle_signal);
+//    signal(SIGTERM, handle_signal);
 // Setup signal handling
     struct sigaction sa;
     sa.sa_handler = handle_signal;
@@ -373,7 +379,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     
-    if (daemon) {
+    if (argc == 2 && strcmp(argv[1], "-d") == 0) {
         daemonize();
     }
         //listen for a connection: put the socket in passive mode to accept connections
@@ -384,7 +390,8 @@ int main(int argc, char *argv[]) {
 	}
 	
 	syslog(LOG_INFO, "Server is listening on port 9000...\n");
-#if 0	
+
+#if 0
 	// Create timestamp thread
         pthread_t timestamp_thread_id;
         if (pthread_create(&timestamp_thread_id, NULL, timestamp_thread, NULL) != 0) {
