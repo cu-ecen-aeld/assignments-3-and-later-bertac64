@@ -20,6 +20,7 @@
 #include <time.h>
 #include <pthread.h>
 #include "queue.h"
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 #define PORT "9000"
 //#define BACKLOG 10
@@ -31,6 +32,8 @@
 #endif
 #define BUFFER_SIZE 1024
 #define TIMEOUT_SEC 1
+
+#define SEARCH_STRING "AESDCHAR_IOCSEEKTO:"
 
 volatile sig_atomic_t sig_received = 0;
 volatile sig_atomic_t proc_run = 0;
@@ -81,6 +84,32 @@ void daemonize() {
     }
 }
 
+static int check_iocseekto(const char *buffer, size_t buffer_len, uint32_t *par1, uint32_t *par2){
+	int retval = 0;
+	uint32_t p1, p2;
+		
+	if(buffer == NULL || buffer_len == 0){
+		syslog(LOG_ERR, "Invalid buffer pointer of buffer length");
+		retval = -1;
+	}else{
+		syslog(LOG_INFO, "checking for iocseekto command");
+		if (strstr(buffer, SEARCH_STRING) != NULL){
+			syslog(LOG_INFO, "checking for iocseekto values");
+			if (sscanf(buffer, "AESDCHAR_IOCSEEKTO:%d,%d", &p1, &p2) != 2){
+				syslog(LOG_ERR, "Invalid IOCTL command");
+				retval = -1;
+			}
+			*par1 = p1;
+			*par2 = p2;
+			syslog(LOG_INFO,"write_cmd: %d, write_cmd_offset: %d", p1, p2);
+		}else{
+			syslog(LOG_INFO,"No iocseekto command: skip.\n");
+			retval = 1;
+		}
+	}
+	return retval;
+}
+
 void *process_client(void *arg) {
     int client_socket = *(int*)arg;
     free(arg);
@@ -91,6 +120,7 @@ void *process_client(void *arg) {
     char *newline_pos;
     proc_run = 1;
     int file_fd;
+    int iocseek = 0;
     
     // activating mutex
     pthread_mutex_lock(&file_mutex);
@@ -131,7 +161,7 @@ void *process_client(void *arg) {
 
 		//calculate the real packet length
 		packet_len += num_bytes;
-		syslog(LOG_INFO,"packet received: %ld bytes\n", packet_len);
+//		syslog(LOG_INFO,"packet received: %ld bytes\n", packet_len);
 		
 		//check newline position
 		newline_pos = strchr(packet, '\n') + 1;
@@ -139,37 +169,66 @@ void *process_client(void *arg) {
 #ifdef USE_AESD_CHAR_DEVICE
 		//open driver endpoint
 		file_fd = open(FILE_PATH, O_RDWR | O_APPEND | O_CREAT, 0644);
-	    if (file_fd == -1) {
-	        perror("open");
-	        close(client_socket);
-	        if(packet) free(packet);
-	        pthread_mutex_unlock(&file_mutex);
-	        pthread_exit(NULL);
-	    }
+		if (file_fd == -1) {
+		    perror("open");
+		    close(client_socket);
+		    if(packet) free(packet);
+		    pthread_mutex_unlock(&file_mutex);
+		    pthread_exit(NULL);
+		}
+//		syslog(LOG_INFO,"device file descriptor open\n");
 #endif
-		// write packet
-		if (packet_len > BUFFER_SIZE) {
-			if (write(file_fd, packet, BUFFER_SIZE) < BUFFER_SIZE) {
-				syslog(LOG_ERR, "Writing partial data error: %s", strerror(errno));
+		
+		// check for ioseek command
+		uint32_t p1, p2;
+		iocseek = check_iocseekto(packet, packet_len, &p1, &p2);
+		if(iocseek < 0){
+			if(packet) free(packet);
+			close(file_fd);
+			pthread_mutex_unlock(&file_mutex);
+			pthread_exit(NULL);
+		}
+		else if(iocseek > 0){
+			// write packet
+//			syslog(LOG_INFO,"writing packet data...");
+			if (packet_len > BUFFER_SIZE) {
+				if (write(file_fd, packet, BUFFER_SIZE) < BUFFER_SIZE) {
+					syslog(LOG_ERR, "Writing partial data error: %s", strerror(errno));
+				}
+			}else{
+				while (newline_pos){
+				    // writing data into the file
+					ssize_t bytes_written = write(file_fd, packet, packet_len);
+					if (bytes_written == -1) {
+						syslog(LOG_ERR, "Error writing to file: %s", strerror(errno));
+						if(packet) free(packet);
+						close(file_fd);
+						pthread_mutex_unlock(&file_mutex);
+						pthread_exit(NULL);
+					}
+					if(packet_len < bytes_written){
+						newline_pos = strtok(NULL,"\n");
+						packet_len = strlen(newline_pos) + 1;
+					}else{
+						newline_pos = NULL;
+					}
+//					syslog(LOG_INFO,"bytes written: %ld\n", bytes_written);
+//					printf("bytes written: %ld\n", bytes_written);
+				}
 			}
-		}else{
-			while (newline_pos){
-	            // writing data into the file
-				ssize_t bytes_written = write(file_fd, packet, packet_len);
-				if (bytes_written == -1) {
-					syslog(LOG_ERR, "Error writing to file: %s", strerror(errno));
-					if(packet) free(packet);
-					close(file_fd);
-					pthread_mutex_unlock(&file_mutex);
-					pthread_exit(NULL);
-				}
-				if(packet_len < bytes_written){
-					newline_pos = strtok(NULL,"\n");
-					packet_len = strlen(newline_pos) + 1;
-				}else{
-					newline_pos = NULL;
-				}
-				syslog(LOG_INFO,"bytes written: %ld\n", bytes_written);
+		}
+		else{
+			struct aesd_seekto seekto;
+			seekto.write_cmd = p1;
+			seekto.write_cmd_offset = p2;
+//			syslog(LOG_INFO, "executing ioctl...");
+			ssize_t bytes_written = ioctl(file_fd, AESDCHAR_IOCSEEKTO, &seekto);
+			if (bytes_written != 0) {
+				syslog(LOG_ERR, "IOCTL Error: %s", strerror(errno));
+				if(packet) free(packet);
+				close(file_fd);
+				pthread_mutex_unlock(&file_mutex);
+				pthread_exit(NULL);
 			}
 		}
 
@@ -183,7 +242,7 @@ void *process_client(void *arg) {
 		while (file_size > offset) {
 			num_bytes = pread(file_fd, packet, BUFFER_SIZE, offset);
 #else
-		close(file_fd);
+/*		close(file_fd);
 		file_fd = open(FILE_PATH, O_RDWR | O_TRUNC | O_CREAT, 0644);
 	    if (file_fd == -1) {
 	        perror("open");
@@ -191,12 +250,15 @@ void *process_client(void *arg) {
 	        if(packet) free(packet);
 	        pthread_mutex_unlock(&file_mutex);
 	        pthread_exit(NULL);
-	    }
+	    }*/
 		ssize_t offset = 0;
-
+//		syslog(LOG_INFO,"reading data from the circular buffer...");
 		while(1){
 			memset(packet,0,BUFFER_SIZE);		// clear the buffer before to store the data
-			num_bytes = pread(file_fd, packet, BUFFER_SIZE, offset);
+//			printf("reading from file or device...\n");
+//			printf("offset: %ld\n", offset);
+			num_bytes = read(file_fd, packet, BUFFER_SIZE);
+//			printf("data acquired: %ld\n", num_bytes);
 #endif
 			if (num_bytes == -1) {
 				syslog(LOG_ERR, "Error reading from file: %s", strerror(errno));
